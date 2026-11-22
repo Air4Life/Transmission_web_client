@@ -1,0 +1,16 @@
+[Unit]
+Description=Transmission engine for Torrent Harbor
+After=network.target
+
+[Service]
+User=torrent-harbor
+Group=torrent-harbor
+ExecStart=/usr/bin/transmission-daemon --foreground --config-dir /var/lib/torrent-harbor/engine
+Restart=on-failure
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

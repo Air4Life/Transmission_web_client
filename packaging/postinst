@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+if [ "$1" = configure ]; then
+    if ! getent passwd torrent-harbor >/dev/null; then
+        adduser --system --group --home /var/lib/torrent-harbor --no-create-home --quiet torrent-harbor
+    fi
+    install -d -o torrent-harbor -g torrent-harbor -m 0750 /var/lib/torrent-harbor /var/lib/torrent-harbor/downloads /var/lib/torrent-harbor/engine
+    install -d -o root -g torrent-harbor -m 0750 /etc/torrent-harbor
+    python3 - <<'PY'
+import json, secrets, os, grp
+from pathlib import Path
+config=Path('/etc/torrent-harbor/config.json')
+if not config.exists():
+    fd=os.open(config,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o640)
+    with os.fdopen(fd,'w') as f:
+        json.dump({'listen':'0.0.0.0','port':8080,'username':'admin','password':secrets.token_urlsafe(24)},f,indent=2)
+    os.chown(config,0,grp.getgrnam('torrent-harbor').gr_gid)
+engine=Path('/var/lib/torrent-harbor/engine/settings.json')
+if not engine.exists():
+    settings={'download-dir':'/var/lib/torrent-harbor/downloads','rpc-enabled':True,'rpc-bind-address':'127.0.0.1','rpc-port':9092,'rpc-authentication-required':False,'rpc-whitelist-enabled':True,'rpc-whitelist':'127.0.0.1','rpc-host-whitelist-enabled':True,'rpc-host-whitelist':'localhost,127.0.0.1','peer-port':51413,'umask':23}
+    engine.write_text(json.dumps(settings,indent=2))
+    import pwd
+    user=pwd.getpwnam('torrent-harbor')
+    os.chown(engine,user.pw_uid,user.pw_gid)
+    os.chmod(engine,0o600)
+PY
+    if [ -d /run/systemd/system ]; then
+        systemctl daemon-reload
+        systemctl enable torrent-harbor-engine.service torrent-harbor.service
+        systemctl restart torrent-harbor-engine.service torrent-harbor.service
+    fi
+    echo 'Torrent Harbor: http://SERVER-IP:8080 ; credentials: sudo cat /etc/torrent-harbor/config.json'
+fi

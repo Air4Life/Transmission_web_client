@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+node_modules/
+dist/*
+!dist/torrent-harbor_1.1.0_all.deb
+!dist/SHA256SUMS-1.1.0

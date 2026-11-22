@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
+# Preserve downloads, credentials and engine state, including on purge.

@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if [ "$1" = remove ] && [ -d /run/systemd/system ]; then
+    systemctl stop torrent-harbor.service torrent-harbor-engine.service || true
+    systemctl disable torrent-harbor.service torrent-harbor-engine.service || true
+fi

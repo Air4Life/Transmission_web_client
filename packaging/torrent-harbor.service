@@ -1,0 +1,19 @@
+[Unit]
+Description=Torrent Harbor web interface
+After=network.target torrent-harbor-engine.service
+Wants=torrent-harbor-engine.service
+
+[Service]
+User=torrent-harbor
+Group=torrent-harbor
+ExecStart=/usr/bin/python3 /usr/lib/torrent-harbor/server.py
+Restart=on-failure
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/torrent-harbor
+
+[Install]
+WantedBy=multi-user.target
