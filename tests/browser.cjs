@@ -7,21 +7,23 @@ const server=spawn('python3',['server.py'],{env:{...process.env,HARBOR_CONFIG:co
 let browser;
 try{
  browser=await chromium.launch({headless:true,executablePath:'/usr/bin/chromium',args:['--no-sandbox']});
- const page=await browser.newPage({httpCredentials:{username:'admin',password:'test'}});
+ const page=await browser.newPage();
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  const calls=[];
  let settings={'download-dir':'/downloads','incomplete-dir':'/partial','incomplete-dir-enabled':false,'start-added-torrents':true,'rename-partial-files':true,'speed-limit-down-enabled':false,'speed-limit-up-enabled':false,'speed-limit-down':1000,'speed-limit-up':500,'download-dir-free-space':500000000000,'download-queue-size':5,'seedRatioLimit':2,'encryption':'preferred'};
  let stats=[{wanted:true,priority:0,bytesCompleted:42},{wanted:true,priority:0,bytesCompleted:0}];
- let failFiles=false, metadataReady=true;
+ let failFiles=false, metadataReady=true, location='/downloads';
+ let previewed=false, added=false;
 
  await page.route('**/api/rpc',async route=>{
  const p=route.request().postDataJSON();calls.push(p);
  let arguments={};
  if(p.method==='torrent-get')arguments={torrents:[{id:1,name:'Ubuntu 24.04 LTS.iso',status:4,percentDone:.42,totalSize:6000000000,haveValid:2520000000,rateDownload:12500000,rateUpload:140000,eta:300,peersConnected:12,error:0,errorString:'',addedDate:1}]};
+ if(p.method==='torrent-get' && p.arguments.fields.includes('downloadDir') && !p.arguments.fields.includes('fileStats'))arguments={torrents:[{downloadDir:location}]};
  if(p.method==='session-stats')arguments={downloadSpeed:12500000,uploadSpeed:140000,activeTorrentCount:1,torrentCount:1};
  if(p.method==='session-get')arguments={...settings};
  if(p.method==='session-set')Object.assign(settings,p.arguments);
- if(p.method==='torrent-get' && p.arguments.fields.includes('fileStats'))arguments={torrents:[{downloadDir:'/downloads',uploadRatio:0.5,metadataPercentComplete:metadataReady?1:0,trackerStats:[],files:[{name:'video.mkv',length:100},{name:'extras/readme.txt',length:100}],fileStats:stats.map(s=>({...s}))}]};
+ if(p.method==='torrent-get' && p.arguments.fields.includes('fileStats'))arguments={torrents:[{downloadDir:location,uploadRatio:0.5,metadataPercentComplete:metadataReady?1:0,trackerStats:[],files:[{name:'video.mkv',length:100},{name:'extras/readme.txt',length:100}],fileStats:stats.map(s=>({...s}))}]};
  if(p.method==='torrent-set'){
   if(failFiles){failFiles=false;return route.fulfill({json:{result:'simulated engine error',arguments:{}}});}
   for(const [key,value] of [['files-wanted',true],['files-unwanted',false]])for(const i of p.arguments[key]||[])stats[i].wanted=value;
@@ -30,14 +32,29 @@ try{
 
  await route.fulfill({json:{result:'success',arguments}});
  });
+ await page.route('**/api/path-check',route=>route.fulfill({json:{path:route.request().postDataJSON().path,free:500000000000,writable:true}}));
+ await page.route('**/api/preview',route=>{previewed=true;return route.fulfill({json:{token:'preview-token',state:'pending'}});});
+ await page.route('**/api/preview-status',route=>route.fulfill({json:{token:'preview-token',state:'ready',name:'Preview bundle',files:[{name:'video.mkv',length:100},{name:'extras.txt',length:50}]}}));
+ await page.route('**/api/preview-cancel',route=>route.fulfill({json:{}}));
+ await page.route('**/api/add',route=>{const p=route.request().postDataJSON();if(p.files[1].wanted||p.files[0].priority!==1)throw Error('Preview selection incorrect');added=true;return route.fulfill({json:{'torrent-added':{id:1}}});});
+ await page.route('**/api/relocate',route=>{const p=route.request().postDataJSON();location=p.path;return route.fulfill({json:{path:location,message:p.move?'Перенос запрошен':'Проверка запрошена'}});});
  await page.goto('http://127.0.0.1:18080');
+ await page.locator('#username').fill('admin');await page.locator('#password').fill('test');await page.locator('#login-form button').click();
  await page.getByText('Ubuntu 24.04 LTS.iso',{exact:true}).waitFor();
  await page.locator('#theme').selectOption('light');
  if(await page.locator('html').getAttribute('data-theme')!=='light')throw Error('Theme failed');
  await page.locator('#theme').selectOption('dark');
  await page.getByText('Ⅱ Пауза',{exact:true}).click();
  await page.locator('#add-open').click();await page.locator('#magnet').fill('magnet:?xt=urn:btih:0123456789012345678901234567890123456789');await page.locator('#add-form button[type=submit]').click();
+ await page.locator('[data-preview-index="1"]').waitFor();
+ if(!previewed||added)throw Error('Torrent added before selection');
+ await page.locator('#preview-none').click();await page.locator('#add-submit').click();await page.getByText('Выберите хотя бы один файл',{exact:true}).waitFor();
+ if(added)throw Error('Empty selection accepted');await page.locator('#preview-all').click();
+ await page.locator('[data-preview-index="1"]').uncheck();
+ await page.getByLabel('Приоритет до добавления: video.mkv',{exact:true}).selectOption('1');
+ await page.locator('#add-submit').click();
  await page.waitForFunction(()=>!document.querySelector('#add-dialog').open);
+ if(!added)throw Error('Prepared add missing');
  // Settings: persistence in RPC state after reload, changed-only payload, server error display.
  await page.locator('#settings-open').click();
  await page.locator('#setting-download-dir').fill('/mnt/media');
@@ -50,7 +67,12 @@ try{
  await page.locator('#settings-open').click();
  if(await page.locator('#setting-download-dir').inputValue()!=='/mnt/media')throw Error('Directory not restored');
  if(!(await page.locator('#setting-incomplete-dir-enabled').isChecked()))throw Error('Incomplete not restored');
+ await page.locator('#setting-download-dir').locator('..').getByRole('button',{name:'Проверить папку'}).click();
+ await page.getByText('Запись доступна',{exact:false}).waitFor();
  await page.locator('#settings-dialog [data-close]').click();
+ await page.getByRole('button',{name:'Папка',exact:true}).click();await page.locator('#location-path').fill('/mnt/new');await page.locator('#location-submit').click();
+ await page.getByText('Сейчас: /mnt/new',{exact:true}).waitFor();await page.locator('#location-dialog [data-close]').click();
+
  // File indices are zero-based; preserve unrelated priorities and omit empty arrays.
  await page.locator('.torrent-name').click();
  await page.locator('[data-file-index="1"]').uncheck();
@@ -68,10 +90,10 @@ try{
  const before=calls.filter(c=>c.method==='torrent-set').length;
  await page.locator('#files-save').click();await page.getByText('Выбор и приоритеты сохранены',{exact:true}).waitFor();
  if(calls.filter(c=>c.method==='torrent-set').length!==before)throw Error('Unchanged files sent');
- await page.getByText('Снять все',{exact:true}).click();await page.locator('#files-save').click();
+ await page.locator('#detail-dialog').getByText('Снять все',{exact:true}).click();await page.locator('#files-save').click();
  await page.getByText('Выбор и приоритеты сохранены',{exact:true}).waitFor();
  if(stats.some(s=>s.wanted))throw Error('Unselect all failed');
- await page.getByText('Выбрать все',{exact:true}).click();await page.locator('#files-save').click();
+ await page.locator('#detail-dialog').getByText('Выбрать все',{exact:true}).click();await page.locator('#files-save').click();
  await page.getByText('Выбор и приоритеты сохранены',{exact:true}).waitFor();
  if(stats.some(s=>!s.wanted))throw Error('Select all failed');
  await page.setViewportSize({width:390,height:844});
@@ -90,8 +112,10 @@ try{
  await page.screenshot({path:'dist/desktop.png',fullPage:true});
  await page.setViewportSize({width:390,height:844});await page.screenshot({path:'dist/mobile.png',fullPage:true});
  if(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth))throw Error('Mobile overflow');
- if(!calls.some(c=>c.method==='torrent-add')||!calls.some(c=>c.method==='torrent-stop'))throw Error('Action missing');
+ if(!added||!calls.some(c=>c.method==='torrent-stop'))throw Error('Action missing');
+ await page.locator('#logout').click();await page.locator('#login-form').waitFor();
+ await page.goto('http://127.0.0.1:18080');await page.locator('#login-form').waitFor();
  if(errors.length)throw Error(errors.join('\n'));
- console.log('Browser checks passed: rendering, themes, pause, magnet, settings persistence, file selection, priorities, retry, mobile width; no JS errors.');
+ console.log('Browser checks passed: rendering, themes, pause, magnet, login/logout, preview before add, path checks, relocation, settings, file priorities, retry, mobile width; no JS errors.');
 }finally{if(browser)await browser.close();server.kill();fs.unlinkSync(config);}
 })().catch(e=>{console.error(e);process.exitCode=1;});

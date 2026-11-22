@@ -1,0 +1,32 @@
+name: Ubuntu 24.04 package verification
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ubuntu engine and metadata dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-libtorrent transmission-daemon adduser systemd
+          sudo systemctl stop transmission-daemon
+      - name: Build DEB
+        run: ./build-deb.sh
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Real systemd install, upgrade, restart, move, magnet and removal
+        run: sudo /usr/bin/python3 tests/ubuntu/integration.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: torrent-harbor-ubuntu-24.04
+          path: dist/torrent-harbor_1.2.0_all.deb
+      - name: Service logs on failure
+        if: failure()
+        run: sudo journalctl -u torrent-harbor -u torrent-harbor-engine -u torrent-harbor-paths --no-pager -n 150

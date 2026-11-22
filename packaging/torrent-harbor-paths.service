@@ -1,0 +1,18 @@
+[Unit]
+Description=Torrent Harbor directory permission checker
+After=torrent-harbor-engine.service
+JoinsNamespaceOf=torrent-harbor-engine.service
+PartOf=torrent-harbor-engine.service
+
+[Service]
+User=torrent-harbor
+Group=torrent-harbor
+ExecStart=/usr/bin/python3 /usr/lib/torrent-harbor/path_probe.py
+Restart=on-failure
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

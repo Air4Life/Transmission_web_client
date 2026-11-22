@@ -26,8 +26,8 @@ if not engine.exists():
 PY
     if [ -d /run/systemd/system ]; then
         systemctl daemon-reload
-        systemctl enable torrent-harbor-engine.service torrent-harbor.service
-        systemctl restart torrent-harbor-engine.service torrent-harbor.service
+        systemctl enable torrent-harbor-engine.service torrent-harbor-paths.service torrent-harbor.service
+        systemctl restart torrent-harbor-engine.service torrent-harbor-paths.service torrent-harbor.service
     fi
     echo 'Torrent Harbor: http://SERVER-IP:8080 ; credentials: sudo cat /etc/torrent-harbor/config.json'
 fi

@@ -1,7 +1,7 @@
 [Unit]
 Description=Torrent Harbor web interface
-After=network.target torrent-harbor-engine.service
-Wants=torrent-harbor-engine.service
+After=network.target torrent-harbor-engine.service torrent-harbor-paths.service
+Wants=torrent-harbor-engine.service torrent-harbor-paths.service
 
 [Service]
 User=torrent-harbor
