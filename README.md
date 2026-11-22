@@ -7,8 +7,8 @@
 
 ## Скачать пакет
 
-Готовый DEB 1.1.0 находится в [Releases](https://github.com/Air4Life/Transmission_web_client/releases/tag/v1.1.0)
-и в каталоге `dist/`. Исходный код и скрипт сборки находятся в этом репозитории.
+Готовый [DEB 1.1.0 можно скачать напрямую](https://raw.githubusercontent.com/Air4Life/Transmission_web_client/main/dist/torrent-harbor_1.1.0_all.deb).
+Также он находится в каталоге `dist/`. Исходный код и скрипт сборки находятся в этом репозитории.
 Приложение использует отдельный экземпляр transmission-daemon и управляет им через RPC.
 
 ## Установка
