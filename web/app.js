@@ -92,6 +92,60 @@ async function openLocation(t){
   $('location-path').value=result.torrents[0].downloadDir;$('location-move').checked=true;$('location-status').textContent='';$('location-dialog').showModal();
  }catch(e){notify(e);}
 }
+// Server-side directory picker: helper uses the same UID/restrictions as Transmission.
+let folderPath='/', folderParent='/', folderNext=null, folderGeneration=0, folderTimer=null;
+async function loadFolders(path, offset=0){
+ const generation=++folderGeneration;
+ $('folder-address').disabled=true;$('folder-path-form').querySelector('button').disabled=true;
+ $('folder-select').disabled=true;$('folder-more').disabled=true;$('folder-list').setAttribute('aria-busy','true');
+ $('folder-status').textContent='Загрузка папок…';$('folder-status').className='muted';
+ try{
+  const data=await api('/api/directories',{path,offset,query:$('folder-search').value.trim(),hidden:$('folder-hidden').checked});
+  if(generation!==folderGeneration||!$('folder-dialog').open)return;
+  folderPath=data.path;folderParent=data.parent;folderNext=data.next_offset;$('folder-address').value=data.path;
+  const crumbs=$('folder-breadcrumbs');crumbs.replaceChildren();
+  const parts=data.path.split('/').filter(Boolean);let built='';
+  for(const part of ['/',...parts]){
+   built=part==='/'?'/':built.replace(/\/$/,'')+'/'+part;
+   const target=built,button=node('button','',part);button.type='button';button.onclick=()=>navigateFolder(target);crumbs.append(button);
+  }
+  const list=$('folder-list');if(offset===0)list.replaceChildren();
+  for(const entry of data.entries){
+   const button=node('button','folder-row');button.type='button';button.disabled=!entry.readable;
+   const icon=node('span','folder-icon',entry.symlink?'▣ ↗':'▣'),name=node('span','folder-name',entry.name);
+   const note=node('small','',!entry.readable?'Нет доступа':entry.writable?'':'Только чтение');button.append(icon,name,note);
+   button.onclick=()=>navigateFolder(entry.path);list.append(button);
+  }
+  if(!data.total)list.append(node('p','folder-empty',$('folder-search').value?'Совпадений нет':'В этой папке нет подкаталогов'));
+  $('folder-up').disabled=data.path===data.parent;
+  $('folder-more').hidden=folderNext===null;
+  $('folder-summary').textContent=`Папок: ${Math.min(offset+data.entries.length,data.total)} из ${data.total} · свободно ${bytes(data.free)}`;
+  $('folder-status').textContent='';$('folder-select').disabled=false;
+ }catch(e){if(generation===folderGeneration){$('folder-status').textContent=e.message;$('folder-status').className='error';}}
+ finally{if(generation===folderGeneration){$('folder-list').setAttribute('aria-busy','false');$('folder-more').disabled=false;$('folder-address').disabled=false;$('folder-path-form').querySelector('button').disabled=false;}}
+}
+function navigateFolder(path){clearTimeout(folderTimer);$('folder-search').value='';loadFolders(path);}
+$('location-browse').onclick=()=>{
+ $('folder-search').value='';$('folder-hidden').checked=false;$('folder-list').replaceChildren();$('folder-breadcrumbs').replaceChildren();$('folder-summary').textContent='';
+ $('folder-dialog').showModal();loadFolders($('location-path').value.trim()||'/');
+};
+$('folder-dialog').addEventListener('close',()=>{folderGeneration++;clearTimeout(folderTimer);});
+$('folder-path-form').onsubmit=event=>{event.preventDefault();navigateFolder($('folder-address').value.trim());};
+$('folder-up').onclick=()=>navigateFolder(folderParent);
+$('folder-root').onclick=()=>navigateFolder('/');
+$('folder-refresh').onclick=()=>loadFolders(folderPath);
+$('folder-hidden').onchange=()=>loadFolders(folderPath);
+$('folder-search').oninput=()=>{clearTimeout(folderTimer);folderTimer=setTimeout(()=>loadFolders(folderPath),250);};
+$('folder-more').onclick=()=>{if(folderNext!==null)loadFolders(folderPath,folderNext);};
+$('folder-select').onclick=async()=>{
+ const generation=folderGeneration;$('folder-select').disabled=true;$('folder-status').className='muted';$('folder-status').textContent='Проверка доступа…';
+ try{
+  const result=await api('/api/path-check',{path:folderPath,write:$('location-move').checked});
+  if(generation!==folderGeneration||!$('folder-dialog').open)return;
+  $('location-path').value=result.path;$('location-status').className='success';$('location-status').textContent=`Папка выбрана · свободно ${bytes(result.free)}`;$('folder-dialog').close();
+ }catch(e){if(generation===folderGeneration){$('folder-status').className='error';$('folder-status').textContent=e.message;}}
+ finally{if(generation===folderGeneration)$('folder-select').disabled=false;}
+};
 $('location-check').onclick=()=>showPathCheck($('location-path').value.trim(),'location-status',$('location-move').checked).catch(()=>{});
 $('location-form').onsubmit=async event=>{
  event.preventDefault();const button=event.submitter;button.disabled=true;$('location-status').textContent='Передача запроса движку…';

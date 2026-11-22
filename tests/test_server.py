@@ -92,6 +92,34 @@ class GatewayTests(unittest.TestCase):
         self.assertNotIn('metainfo',previews.get('a','token'))
         previews.cancel('b','token');self.assertIn('token',previews.jobs)
         previews.cancel_owner('a');self.assertNotIn('token',previews.jobs)
+    def test_directory_listing_requires_auth_and_csrf(self):
+        self.assertEqual(self.request('/api/directories',{'path':'/'},auth=False).status,401)
+        self.assertEqual(self.request('/api/directories',{'path':'/'},csrf=False).status,403)
+        response={'path':'/mnt','parent':'/','entries':[],'offset':0,'next_offset':None,'total':0,'free':1000}
+        with patch.object(harbor,'probe_request',return_value=response) as helper:
+            with self.request('/api/directories',{'path':'/mnt','offset':100,'query':'media','hidden':True}) as result:
+                self.assertEqual(result.status,200);self.assertEqual(json.load(result),response)
+            helper.assert_called_once_with({'operation':'list','path':'/mnt','offset':100,'query':'media','hidden':True})
+    def test_directory_listing(self):
+        from path_probe import list_directories
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            for name in ['Alpha','beta','.hidden']:(root/name).mkdir()
+            (root/'ordinary-file.txt').write_text('no files in picker')
+            (root/'link').symlink_to(root/'Alpha',target_is_directory=True)
+            data=list_directories(d)
+            self.assertEqual([e['name'] for e in data['entries']],['Alpha','beta','link'])
+            self.assertTrue(data['entries'][2]['symlink'])
+            self.assertEqual(list_directories(str(root/'link'))['path'],str(root/'Alpha'))
+            self.assertEqual(list_directories(d,query='ALP')['total'],1)
+            self.assertEqual(list_directories(d,hidden=True)['total'],4)
+            for i in range(110):(root/f'folder-{i:03}').mkdir()
+            first=list_directories(d);self.assertEqual(len(first['entries']),100);self.assertEqual(first['next_offset'],100)
+            second=list_directories(d,offset=100);self.assertEqual(len(second['entries']),13);self.assertIsNone(second['next_offset'])
+            for bad in [-1,True,'100']:
+                with self.assertRaises(ValueError):list_directories(d,offset=bad)
+            with self.assertRaises(ValueError):list_directories(str(root/'ordinary-file.txt'))
+
     def test_path_probe(self):
         from path_probe import check_path
         with tempfile.TemporaryDirectory() as d:

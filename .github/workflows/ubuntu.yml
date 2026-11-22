@@ -29,7 +29,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: torrent-harbor-ubuntu-24.04
-          path: dist/torrent-harbor_1.2.0_all.deb
+          path: dist/torrent-harbor_1.2.1_all.deb
       - name: Service logs on failure
         if: failure()
         run: sudo journalctl -u torrent-harbor -u torrent-harbor-engine -u torrent-harbor-paths --no-pager -n 150

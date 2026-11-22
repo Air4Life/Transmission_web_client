@@ -32,6 +32,13 @@ try{
 
  await route.fulfill({json:{result:'success',arguments}});
  });
+ await page.route('**/api/directories',route=>{
+  const p=route.request().postDataJSON();
+  if(p.path==='/denied')return route.fulfill({status:400,json:{error:'Нет доступа к каталогу'}});
+  const tree={'/downloads':['../ignore','Подпапка'],'/':['mnt','downloads'],'/mnt':['new','other'],'/mnt/new':[],'/downloads/Подпапка':[]};
+  const names=(tree[p.path]||[]).filter(n=>n!=='../ignore').filter(n=>!p.query||n.toLowerCase().includes(p.query.toLowerCase()));
+  return route.fulfill({json:{path:p.path,parent:p.path==='/'?'/':p.path.slice(0,p.path.lastIndexOf('/'))||'/',entries:names.map(name=>({name,path:p.path.replace(/\/$/,'')+'/'+name,readable:true,writable:true,symlink:false})),offset:0,next_offset:null,total:names.length,free:500000000000}});
+ });
  await page.route('**/api/path-check',route=>route.fulfill({json:{path:route.request().postDataJSON().path,free:500000000000,writable:true}}));
  await page.route('**/api/preview',route=>{previewed=true;return route.fulfill({json:{token:'preview-token',state:'pending'}});});
  await page.route('**/api/preview-status',route=>route.fulfill({json:{token:'preview-token',state:'ready',name:'Preview bundle',files:[{name:'video.mkv',length:100},{name:'extras.txt',length:50}]}}));
@@ -70,7 +77,22 @@ try{
  await page.locator('#setting-download-dir').locator('..').getByRole('button',{name:'Проверить папку'}).click();
  await page.getByText('Запись доступна',{exact:false}).waitFor();
  await page.locator('#settings-dialog [data-close]').click();
- await page.getByRole('button',{name:'Папка',exact:true}).click();await page.locator('#location-path').fill('/mnt/new');await page.locator('#location-submit').click();
+ await page.getByRole('button',{name:'Папка',exact:true}).click();await page.locator('#location-browse').click();
+ await page.locator('#folder-list').getByRole('button',{name:'Подпапка',exact:false}).waitFor();
+ await page.locator('#folder-root').click();await page.locator('#folder-list').getByRole('button',{name:'mnt',exact:false}).click();
+ await page.locator('#folder-search').fill('new');await page.locator('#folder-list').getByRole('button',{name:'new',exact:false}).waitFor();
+ await page.locator('#folder-list').getByRole('button',{name:'new',exact:false}).click();await page.getByText('В этой папке нет подкаталогов',{exact:true}).waitFor();
+ await page.setViewportSize({width:390,height:844});
+ if(await page.locator('#folder-dialog').evaluate(el=>el.scrollWidth>el.clientWidth))throw Error('Folder picker mobile overflow');
+ await page.screenshot({path:'dist/folder-picker-mobile.png',fullPage:true});
+ await page.locator('#folder-select').click();await page.waitForFunction(()=>!document.querySelector('#folder-dialog').open);
+ if(await page.locator('#location-path').inputValue()!=='/mnt/new')throw Error('Folder not selected');
+ await page.locator('#location-browse').click();await page.locator('#folder-select').waitFor({state:'visible'});
+ await page.locator('#folder-address').fill('/denied');await page.locator('#folder-path-form button').click();await page.getByText('Нет доступа к каталогу',{exact:true}).waitFor();
+ if(!(await page.locator('#folder-select').isDisabled()))throw Error('Denied folder selectable');
+ await page.locator('#folder-dialog [data-close]').click();
+ if(await page.locator('#location-path').inputValue()!=='/mnt/new')throw Error('Cancel changed path');
+ await page.setViewportSize({width:1280,height:800});await page.locator('#location-submit').click();
  await page.getByText('Сейчас: /mnt/new',{exact:true}).waitFor();await page.locator('#location-dialog [data-close]').click();
 
  // File indices are zero-based; preserve unrelated priorities and omit empty arrays.

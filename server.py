@@ -67,22 +67,25 @@ def engine(method, arguments=None):
     if result.get('result') != 'success': raise ValueError(result.get('result','Ошибка Transmission'))
     return result.get('arguments', {})
 
-def probe_path(path, write=True):
+def probe_request(request):
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
         client.settimeout(8)
         try:
             client.connect(os.environ.get('HARBOR_PROBE_SOCKET','/var/lib/torrent-harbor/path-check.sock'))
         except OSError as exc:
             raise ValueError('Служба проверки папок недоступна: проверьте torrent-harbor-paths') from exc
-        client.sendall(json.dumps({'path':path,'write':write}).encode()+b'\n')
-        response = client.makefile('rb').readline(16384)
+        client.sendall(json.dumps(request).encode()+b'\n')
+        response = client.makefile('rb').readline(1024*1024)
         result = json.loads(response)
         if result.get('error'): raise ValueError(result['error'])
         return result
 
 
+def probe_path(path, write=True):
+    return probe_request({'path':path,'write':write})
+
 class Handler(BaseHTTPRequestHandler):
-    server_version = 'TorrentHarbor/1.2'
+    server_version = 'TorrentHarbor/1.2.1'
     def send(self, status, body, content_type='application/json', headers=None):
         if not isinstance(body, bytes): body = json.dumps(body, ensure_ascii=False).encode()
         self.send_response(status)
@@ -142,6 +145,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.path=='/api/logout':
                 previews.cancel_owner(owner); auth.logout(self.headers.get('Cookie'))
                 return self.send(200,{},headers={'Set-Cookie':self.cookie('',0)})
+            if self.path=='/api/directories':
+                return self.send(200,probe_request({'operation':'list','path':body.get('path'),'offset':body.get('offset',0),'query':body.get('query',''),'hidden':body.get('hidden',False)}))
             if self.path=='/api/path-check':
                 return self.send(200,probe_path(body.get('path'),body.get('write',True)))
             if self.path=='/api/preview':

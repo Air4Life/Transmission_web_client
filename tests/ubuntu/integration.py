@@ -84,7 +84,7 @@ def main():
     if SYSTEMD:command('systemctl','stop','torrent-harbor','torrent-harbor-engine')
     settings=Path('/var/lib/torrent-harbor/engine/settings.json')
     old=json.loads(settings.read_text());old['speed-limit-up']=321;settings.write_text(json.dumps(old))
-    command('dpkg','-i',str(ROOT/'dist/torrent-harbor_1.2.0_all.deb'))
+    command('dpkg','-i',str(ROOT/'dist/torrent-harbor_1.2.1_all.deb'))
     assert Path('/etc/torrent-harbor/config.json').read_bytes()==before
     command('systemd-analyze','verify','/usr/lib/systemd/system/torrent-harbor.service','/usr/lib/systemd/system/torrent-harbor-paths.service','/usr/lib/systemd/system/torrent-harbor-engine.service')
     start_services();wait(lambda:urllib.request.urlopen('http://127.0.0.1:8080').status==200);login()
@@ -94,8 +94,11 @@ def main():
     partial=owned(Path('/var/lib/torrent-harbor/test-partial'))
     destination=owned(Path('/var/lib/torrent-harbor/test-moved'))
     located=owned(Path('/var/lib/torrent-harbor/test-located'))
+    listing=api('/api/directories',{'path':'/var/lib/torrent-harbor','query':'test-'});assert listing['total']==4
+    assert {e['name'] for e in listing['entries']}=={'test-download','test-partial','test-moved','test-located'}
+    assert api('/api/directories',{'path':download})['entries']==[]
     checked=api('/api/path-check',{'path':download});assert checked['writable'] and checked['free']>0
-    try:api('/api/path-check',{'path':'/root'})
+    try:api('/api/directories',{'path':'/root'})
     except AssertionError as exc:assert '400' in str(exc)
     else:raise AssertionError('Protected folder accepted')
     rpc('session-set',{'download-dir':download,'incomplete-dir':partial,'incomplete-dir-enabled':False,'speed-limit-up':777})

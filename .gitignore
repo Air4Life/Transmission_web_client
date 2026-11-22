@@ -6,3 +6,5 @@ dist/*
 !dist/SHA256SUMS-1.1.0
 !dist/torrent-harbor_1.2.0_all.deb
 !dist/SHA256SUMS-1.2.0
+!dist/torrent-harbor_1.2.1_all.deb
+!dist/SHA256SUMS-1.2.1

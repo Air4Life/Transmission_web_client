@@ -13,7 +13,7 @@ install -m 0644 LICENSE "$stage/usr/share/doc/torrent-harbor/copyright"
 for script in postinst prerm postrm; do install -m 0755 "packaging/$script" "$stage/DEBIAN/$script"; done
 cat > "$stage/DEBIAN/control" <<EOF
 Package: torrent-harbor
-Version: 1.2.0
+Version: 1.2.1
 Section: net
 Priority: optional
 Architecture: all
@@ -26,4 +26,4 @@ Description: Modern themed HTTP interface for the Transmission BitTorrent engine
 EOF
 chmod 0755 "$stage"
 chmod -R go-w "$stage"
-dpkg-deb --root-owner-group --build "$stage" dist/torrent-harbor_1.2.0_all.deb
+dpkg-deb --root-owner-group --build "$stage" dist/torrent-harbor_1.2.1_all.deb
