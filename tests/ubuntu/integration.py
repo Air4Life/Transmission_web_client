@@ -127,10 +127,11 @@ def main():
     wait(lambda:torrent()['status']==0);t=torrent();assert t['status']==0;assert [x['wanted'] for x in t['fileStats']]==[True,False];assert [x['priority'] for x in t['fileStats']]==[1,-1]
     # Actual selective transfer through localhost tracker: omitted file must not download.
     rpc('torrent-start',{'ids':[tid]})
+    handle.connect_peer((peer_host,rpc('session-get')['peer-port']))
     try:wait(lambda:torrent()['fileStats'][0]['bytesCompleted']==65536,45)
     except Exception:
         print(rpc('torrent-get',{'ids':[tid],'fields':['status','errorString','trackerStats','peers','fileStats']}),flush=True)
-        print('seed',handle.status().state,handle.status().is_seeding,handle.status().num_peers,flush=True)
+        print('seed',peer,handle.status().state,handle.status().is_seeding,handle.status().num_peers,flush=True)
         raise
     rpc('torrent-stop',{'ids':[tid]})
     assert torrent()['fileStats'][1]['bytesCompleted']==0,'Unwanted aligned file downloaded'
